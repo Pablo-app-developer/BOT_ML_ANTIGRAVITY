@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    image: antigravity-bot:latest
+    container_name: antigravity_trader
+    volumes:
+      - ./models:/app/models
+      - ./reports:/app/reports
+      - ./tensorboard_logs:/app/tensorboard_logs
+      # Mount data if you want to swap datasets without rebuilding
+      - ./datos_btc_15m_binance.csv:/app/datos_btc_15m_binance.csv
+      - ./datos_eth_15m_binance.csv:/app/datos_eth_15m_binance.csv
+      - ./datos_sol_15m_binance.csv:/app/datos_sol_15m_binance.csv
+    command: python train_production.py BTC
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+
+  tensorboard:
+    image: tensorflow/tensorflow:latest
+    container_name: antigravity_board
+    command: tensorboard --logdir /logs --host 0.0.0.0
+    volumes:
+      - ./tensorboard_logs:/logs
+    ports:
+      - "6006:6006"

@@ -50,9 +50,23 @@ python backtest.py ETH models/PRODUCTION/ETH/ppo_eth_final.zip backtest_eth_elit
 ```bash
 python generate_report.py
 ```
-The report (`ESTADO_DE_LAS_PRUEBAS.md`) includes a performance table, Sharpe ratios, drawdowns and equity‑curve images.
 
-## 📊 Current Results (Jan 2026)
+## 🐳 Docker Support
+Run the bot in a containerized environment (ideal for servers).
+
+```bash
+# Build and run default (train BTC)
+docker-compose up --build
+
+# Run a specific command (e.g., train ETH)
+docker-compose run --rm bot python train_production.py ETH
+
+# Run Backtest inside Docker
+docker-compose run --rm bot python backtest.py ETH
+```
+To view training progress, open `http://localhost:6006` for TensorBoard (automatically started).
+
+## 📊 Current Results (Jan 2026)
 | Asset | Return | Sharpe | Max Drawdown | Trades | Final Balance |
 |------|--------|--------|--------------|--------|---------------|
 | **BTC** | **+3.11%** | **2.47** | **0.47%** | 212 | $10,310.51 |
