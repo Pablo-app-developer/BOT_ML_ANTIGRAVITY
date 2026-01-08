@@ -1,6 +1,12 @@
 
 import pandas as pd
 import numpy as np
+import sys
+import os
+
+# Ensure we can import config
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from config import settings
 
 class SMCAnalyst:
     """
@@ -13,11 +19,12 @@ class SMCAnalyst:
         self.swing_lookback = swing_lookback 
         print(f"SMC_Analyst Pro initialized (Daily Liquidity Window={swing_lookback}).")
 
-    def analyze(self, df: pd.DataFrame, trend_bias=0):
+    def analyze(self, df: pd.DataFrame, trend_bias=0, point=0.0001):
         """
         Analiza setups con Liquidez Diaria + Reclamo.
+        point: Valor del punto (ej: 0.00001 EURUSD, 0.001 JPY) para el calculo de SL.
         """
-        signal = self._check_candle_signal(df, -1, trend_bias)
+        signal = self._check_candle_signal(df, -1, trend_bias, point)
         
         last_high = df['High'].iloc[-self.swing_lookback-1:-1].max()
         last_low = df['Low'].iloc[-self.swing_lookback-1:-1].min()
@@ -27,7 +34,7 @@ class SMCAnalyst:
             'signal': signal
         }
 
-    def _check_candle_signal(self, df, idx, trend_bias=0):
+    def _check_candle_signal(self, df, idx, trend_bias=0, point=0.0001):
         if len(df) < self.swing_lookback + 2: return None
         
         current = df.iloc[idx]
@@ -50,6 +57,9 @@ class SMCAnalyst:
         is_bullish = close_p > open_p
         is_bearish = close_p < open_p
         
+        last_candle_high = df['High'].iloc[idx-1]
+        last_candle_low = df['Low'].iloc[idx-1]
+        
         # --- FILTRO PRO: DESPLAZAMIENTO > 0.7 ---
         
         # SEÑAL COMPRA
@@ -57,12 +67,20 @@ class SMCAnalyst:
             if low_p < liq_low and close_p > liq_low and is_bullish:
                 strength = (close_p - low_p) / total_range
                 
-                # Exigimos cierre en el 30% SUPERIOR (Fuerza > 0.7 desde el bajo)
+                # Exigimos cierre en el 30% SUPERIOR (Fuerza > 0.7)
                 if strength > 0.7: 
+                    # BLINDAJE: Stop Loss más amplio (10 pips o 150% de la vela)
+                    # Enforce Minimum SL to avoid noise
+                    # Standard Pip = 10 Points (usually)
+                    min_sl_dist = settings.FIXED_SL_PIPS * (point * 10) 
+                    calc_sl_dist = total_range * 0.5
+                    final_sl_dist = max(min_sl_dist, calc_sl_dist)
+                    
+                    sl_buffer = final_sl_dist 
                     return {
                         'action': 'BUY',
                         'price': close_p,
-                        'sl': low_p - 0.0005, # Buffer 5 pips
+                        'sl': low_p - sl_buffer, 
                         'reason': 'DAILY_LOW_SWEEP_STRONG',
                         'timestamp': current.name
                     }
@@ -72,12 +90,19 @@ class SMCAnalyst:
             if high_p > liq_high and close_p < liq_high and is_bearish:
                 strength = (high_p - close_p) / total_range
                 
-                # Exigimos cierre en el 30% INFERIOR (Fuerza > 0.7 desde el alto)
+                # Exigimos cierre en el 30% INFERIOR (Fuerza > 0.7)
                 if strength > 0.7:
+                    # BLINDAJE: Stop Loss más amplio
+                    # Enforce Minimum SL
+                    min_sl_dist = settings.FIXED_SL_PIPS * (point * 10)
+                    calc_sl_dist = total_range * 0.5
+                    final_sl_dist = max(min_sl_dist, calc_sl_dist)
+                    
+                    sl_buffer = final_sl_dist
                     return {
                         'action': 'SELL',
                         'price': close_p,
-                        'sl': high_p + 0.0005, # Buffer 5 pips
+                        'sl': high_p + sl_buffer,
                         'reason': 'DAILY_HIGH_SWEEP_STRONG',
                         'timestamp': current.name
                     }

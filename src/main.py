@@ -62,9 +62,14 @@ def main():
             # --- AUTO-PROTECTION (TRAILING STOP) ---
             exec_manager.update_trailing_stops()
             
+            # --- RISK GUARDIAN LIVE UPDATE ---
+            account_info = bridge.get_account_info()
+            if account_info:
+                guardian.update_daily_pnl(account_info.balance)
+
             # Check Risk Guardian GLOBAL
             if not guardian.can_trade():
-                print("Risk Guardian has blocked trading.")
+                print(f"Risk Guardian has blocked trading. Current PnL: {guardian.current_daily_loss:.2f}%")
                 time.sleep(300)
                 continue
             
@@ -84,39 +89,56 @@ def main():
             # --- MULTI-ASSET SCANNING LOOP ---
             # Memory to prevent duplicate trades on same candle
             if 'processed_signals' not in locals(): processed_signals = {}
+            if 'processed_logs' not in locals(): processed_logs = {}
             
             for symbol in settings.SYMBOLS:
                 # 2. Data Ingestion
                 # Fetch LTF (Execution)
                 df_ltf = bridge.get_data(symbol, settings.TIMEFRAME_LTF, n_bars=500)
                 
-                # Fetch HTF (Structure)
-                df_htf = bridge.get_data(symbol, settings.TIMEFRAME_HTF, n_bars=100)
+                # Fetch HTF (Structure) - Increased to 300 for 200 EMA
+                df_htf = bridge.get_data(symbol, settings.TIMEFRAME_HTF, n_bars=300)
                 
                 if df_ltf is None or df_ltf.empty: continue
                 
-                # 3. Analysis (Fusion Logic with HTF Filter)
-                # Determine HTF Trend (EMA 50)
+                # Determine HTF Trend (EMA 50 & EMA 200)
                 trend_bias = 0
                 if df_htf is not None and not df_htf.empty:
                     close_htf = df_htf['Close']
-                    if len(close_htf) > 50:
+                    if len(close_htf) > 200:
                         ema_50 = close_htf.ewm(span=50, adjust=False).mean().iloc[-1]
+                        ema_200 = close_htf.ewm(span=200, adjust=False).mean().iloc[-1]
                         last_close = close_htf.iloc[-1]
                         
-                        if last_close > ema_50: trend_bias = 1   # Only Buys
-                        else: trend_bias = -1  # Only Sells
+                        # Strong Trend Layout
+                        if last_close > ema_50 and last_close > ema_200: 
+                            trend_bias = 1   # BUY ONLY (Strong Bull)
+                        elif last_close < ema_50 and last_close < ema_200:
+                            trend_bias = -1  # SELL ONLY (Strong Bear)
+                        else:
+                            # Mixed Trend - Be careful or Neutral
+                            # For safety in recovery mode, we prefer to stay out or follow EMA 200
+                            if last_close > ema_200: trend_bias = 1
+                            else: trend_bias = -1
+                        
                         # print(f"      [Structure] {symbol} {settings.TIMEFRAME_HTF} Trend: {'BULL' if trend_bias==1 else 'BEAR'}")
 
+                        # print(f"      [Structure] {symbol} {settings.TIMEFRAME_HTF} Trend: {'BULL' if trend_bias==1 else 'BEAR'}")
+
+                # Get Symbol Info for Point Value (Correct JPY support)
+                symbol_info = mt5.symbol_info(symbol)
+                point_val = symbol_info.point if symbol_info else 0.0001
+
                 # Run the full analysis pipeline with Trend Filter
-                analysis_result = analyst.analyze(df_ltf, trend_bias=trend_bias)
+                analysis_result = analyst.analyze(df_ltf, trend_bias=trend_bias, point=point_val)
                 
                 trap = analysis_result['trap_zone']
                 signal = analysis_result['signal']
                 
                 # --- [VERBOSE] Heartbeat Status ---
                 last_time = df_ltf.index[-1]
-                if last_time not in processed_signals.get(symbol, []):
+                # Check against processed_logs, NOT processed_signals
+                if last_time != processed_logs.get(symbol):
                     # Si 'trap' existe, muestra los niveles de liquidez
                     if trap:
                         # Formatear niveles con 4 o 5 decimales
@@ -129,6 +151,9 @@ def main():
                     current_price = df_ltf['Close'].iloc[-1]
                     print(f"[{symbol} @ {current_price:.5f}] Status: {status_msg} | Bias: {trend_bias}")
                     sys.stdout.flush()
+                    
+                    # Update log state
+                    processed_logs[symbol] = last_time
                 
                 # Logging Status (Only if trap exists to reduce noise)
                 if trap:
