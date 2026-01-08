@@ -5,11 +5,74 @@ import json
 import os
 from stable_baselines3 import PPO
 from trading_env import TradingEnv
+from config import get_asset_config
+
+def calculate_metrics(net_worths, steps_per_day=96):
+    """
+    Calculate extensive financial metrics.
+    """
+    returns = np.diff(net_worths) / net_worths[:-1]
+    
+    # 1. Total Return
+    initial = net_worths[0]
+    final = net_worths[-1]
+    total_return_pct = ((final - initial) / initial) * 100
+    
+    # 2. Annualized Return (Approximate)
+    days = len(net_worths) / steps_per_day
+    years = days / 252
+    if years > 0:
+        cagr = ((final / initial) ** (1 / years)) - 1
+    else:
+        cagr = 0
+        
+    # 3. Sharpe Ratio
+    risk_free_rate = 0.0
+    excess_returns = returns - risk_free_rate/ (252*steps_per_day)
+    sharpe = np.mean(excess_returns) / (np.std(returns) + 1e-9) * np.sqrt(252 * steps_per_day)
+    
+    # 4. Sortino Ratio
+    negative_returns = returns[returns < 0]
+    downside_std = np.std(negative_returns) if len(negative_returns) > 0 else 1e-9
+    sortino = np.mean(excess_returns) / (downside_std + 1e-9) * np.sqrt(252 * steps_per_day)
+    
+    # 5. Max Drawdown & Duration
+    running_max = np.maximum.accumulate(net_worths)
+    drawdowns = (running_max - net_worths) / running_max
+    max_drawdown_pct = drawdowns.max() * 100
+    
+    # Drawdown Duration (in steps)
+    is_drawdown = drawdowns > 0
+    current_duration = 0
+    max_duration = 0
+    for in_dd in is_drawdown:
+        if in_dd:
+            current_duration += 1
+        else:
+            max_duration = max(max_duration, current_duration)
+            current_duration = 0
+    max_duration = max(max_duration, current_duration)
+    
+    # 6. Calmar Ratio
+    calmar = cagr / (max_drawdown_pct / 100) if max_drawdown_pct > 0 else 0
+    
+    return {
+        "return_pct": total_return_pct,
+        "cagr": cagr * 100,
+        "sharpe": sharpe,
+        "sortino": sortino,
+        "calmar": calmar,
+        "max_drawdown_pct": max_drawdown_pct,
+        "max_dd_duration_steps": max_duration,
+        "max_dd_duration_days": max_duration / steps_per_day
+    }
 
 def run_backtest(asset_name="BTC", model_path=None, data_path=None, chart_name=None):
+    asset_name = asset_name.upper()
+    
     # Default paths if not provided
     if model_path is None:
-        model_path = f"models/PRODUCTION/{asset_name.upper()}/ppo_{asset_name.lower()}_final.zip"
+        model_path = f"models/PRODUCTION/{asset_name}/ppo_{asset_name.lower()}_final.zip"
             
     if data_path is None:
         data_path = f"datos_{asset_name.lower()}_15m_binance.csv"
@@ -20,35 +83,21 @@ def run_backtest(asset_name="BTC", model_path=None, data_path=None, chart_name=N
     print(f"📊 Running Backtest for {asset_name} using {model_path}...")
     
     # Load Data
-    try:
-        df = pd.read_csv(data_path)
-    except FileNotFoundError:
+    if not os.path.exists(data_path):
         print(f"❌ Data file not found: {data_path}")
         return
+    df = pd.read_csv(data_path)
 
-    # Create Env with Asset Specific Risk Config (Standard of Gold / Elite Hybrid)
-    env_params = {}
-    if asset_name.upper() == "SOL":
-        env_params = {
-            "cooldown_steps": 8,
-            "stop_loss": 0.03,
-            "trailing_stop_drop": 0.015,
-            "risk_aversion": 1.2,
-            "ema_penalty": 0.03,
-            "vol_penalty": 0.05
-        }
-        print(f"🎯 {asset_name.upper()} Backtest: MODO ÉLITE ACTIVADO...")
-    elif asset_name.upper() == "ETH":
-        env_params = {
-            "cooldown_steps": 6,
-            "stop_loss": 0.025,
-            "trailing_stop_drop": 0.015,
-            "risk_aversion": 1.3,
-            "ema_penalty": 0.03,
-            "vol_penalty": 0.04
-        }
-        print(f"🎯 {asset_name.upper()} Backtest: MODO ÉLITE ACTIVADO...")
-
+    # Load Config (Professional Refactor)
+    config = get_asset_config(asset_name)
+    if config:
+        print(f"🎯 Config loaded for {asset_name}: {config.env_params}")
+        env_params = config.env_params
+    else:
+         # Fallback for BTC or Testing
+         env_params = {"commission": 0.0005} 
+         print(f"⚠️ No specialist config found. Using default params.")
+    
     env = TradingEnv(df, **env_params)
     
     # Load Model
@@ -73,19 +122,9 @@ def run_backtest(asset_name="BTC", model_path=None, data_path=None, chart_name=N
         if info.get('trade_executed', False): real_trades += 1
         net_worths.append(info['net_worth'])
         
-    # Analysis
+    # Full Metric Analysis
     net_worths = np.array(net_worths)
-    initial_balance = env.initial_balance
-    final_balance = net_worths[-1]
-    total_return = ((final_balance - initial_balance) / initial_balance) * 100
-    
-    # Sharpe Ratio (Approximate)
-    returns = np.diff(net_worths) / net_worths[:-1]
-    sharpe = np.mean(returns) / (np.std(returns) + 1e-9) * np.sqrt(252 * 96) # Adjusted for 15m candles (96 per day)
-    
-    running_max = np.maximum.accumulate(net_worths)
-    drawdowns = (running_max - net_worths) / running_max
-    max_drawdown = drawdowns.max() * 100
+    metrics = calculate_metrics(net_worths)
     
     # Save Results Data
     os.makedirs("reports", exist_ok=True)
@@ -99,14 +138,12 @@ def run_backtest(asset_name="BTC", model_path=None, data_path=None, chart_name=N
             except:
                 current_results = {}
                 
-    current_results[asset_name.upper()] = {
-        "initial_balance": initial_balance,
-        "final_balance": final_balance,
-        "return_pct": total_return,
-        "sharpe_ratio": float(sharpe),
-        "max_drawdown_pct": max_drawdown,
+    current_results[asset_name] = {
+        "initial_balance": env.initial_balance,
+        "final_balance": net_worths[-1],
         "total_trades": real_trades,
-        "chart_path": f"reports/{chart_name}"
+        "chart_path": f"reports/{chart_name}",
+        **metrics # Unpack all new metrics
     }
     
     with open(results_file, 'w') as f:
@@ -115,8 +152,12 @@ def run_backtest(asset_name="BTC", model_path=None, data_path=None, chart_name=N
     # Plotting
     plt.figure(figsize=(12, 6))
     plt.plot(net_worths, label='Equity Curve', color='#00ffcc', linewidth=2)
-    plt.axhline(y=initial_balance, color='white', linestyle='--', alpha=0.5)
-    plt.title(f'{asset_name} Backtest - Return: {total_return:.2f}% | Trades: {real_trades}', fontsize=14, color='white')
+    plt.axhline(y=env.initial_balance, color='white', linestyle='--', alpha=0.5)
+    
+    title_text = (f"{asset_name} | Ret: {metrics['return_pct']:.2f}% | Sharpe: {metrics['sharpe']:.2f} | "
+                  f"Sortino: {metrics['sortino']:.2f} | DD: {metrics['max_drawdown_pct']:.2f}%")
+    
+    plt.title(title_text, fontsize=12, color='white')
     plt.xlabel('Steps', color='white')
     plt.ylabel('Net Worth ($)', color='white')
     plt.grid(True, alpha=0.1)
@@ -128,10 +169,13 @@ def run_backtest(asset_name="BTC", model_path=None, data_path=None, chart_name=N
     
     chart_dest = f"reports/{chart_name}"
     plt.savefig(chart_dest, facecolor='#1e1e1e')
-    print(f"🖼️ Chart saved as {chart_dest}")
     plt.close()
 
-    print(f"✅ {asset_name} results recorded. Return: {total_return:.2f}%")
+    print(f"✅ {asset_name} Backtest Complete.")
+    print(f"   Return: {metrics['return_pct']:.2f}%")
+    print(f"   Sharpe: {metrics['sharpe']:.2f} | Sortino: {metrics['sortino']:.2f}")
+    print(f"   Calmar: {metrics['calmar']:.2f} | Max DD: {metrics['max_drawdown_pct']:.2f}%")
+    print(f"   Deepest Drawdown Duration: {metrics['max_dd_duration_days']:.1f} days")
 
 if __name__ == "__main__":
     import sys
