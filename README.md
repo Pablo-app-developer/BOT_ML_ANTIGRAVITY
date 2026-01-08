@@ -28,17 +28,17 @@ pip install -r requirements.txt
 
 ## 🛠️ Usage
 ### 1️⃣ Train a model for an asset
+The training script is now modular and uses `config/assets.py` for parameters.
 ```bash
-python -u train_production.py btc   # Bitcoin (default)
-python -u train_production.py sol   # Solana – Elite Hybrid
-python -u train_production.py eth   # Ethereum – Elite Rescue
+python train_production.py BTC                    # Standard Gold
+python train_production.py SOL                    # Elite Hybrid
+python train_production.py ETH --steps 200000     # Elite Rescue (Custom steps)
 ```
 The script will:
-1. Load the CSV data (`datos_<asset>_15m_binance.csv`).
-2. Apply the asset‑specific `env_params`.
-3. Load the best base model if available.
-4. Train for the configured `prod_steps` (150 k steps for SOL/ETH, 150 k for BTC).
-5. Save the final model under `models/PRODUCTION/<ASSET>/`.
+1. Load config from `config/assets.py`.
+2. Load hyper-parameters from `best_hyperparams_<asset>.json`.
+3. Train/Retrain the model using the latest available checkpoint.
+4. Save the model to `models/PRODUCTION/<ASSET>/`.
 
 ### 2️⃣ Backtest a trained model
 ```bash
