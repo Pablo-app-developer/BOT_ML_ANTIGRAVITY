@@ -8,7 +8,7 @@ Este informe resume los resultados de las pruebas realizadas con el cerebro inst
 | :--- | :---: | :---: | :---: | :---: | :--- |
 | **BTC** | 3.11% | 2.47 | 0.47% | 212 | $10,310.51 |
 | **SOL** | 8.37% | 1.06 | 3.68% | 202 | $10,837.02 |
-| **ETH** | 1.33% | 0.89 | 0.88% | 162 | $10,132.88 |
+| **ETH** | 5.04% | 0.00 | 1.90% | 748 | $10,503.80 |
 
 ---
 
@@ -33,12 +33,12 @@ Este informe resume los resultados de las pruebas realizadas con el cerebro inst
 ---
 
 ## 📈 Análisis Detallado: ETH
-- **Retorno Total**: 1.33%
-- **Riesgo Máximo (Drawdown)**: 0.88%
-- **Actividad**: 162 operaciones ejecutadas.
+- **Retorno Total**: 5.04%
+- **Riesgo Máximo (Drawdown)**: 1.90%
+- **Actividad**: 748 operaciones ejecutadas.
 - **Eficiencia**: Blindaje institucional del 2% activo.
 
-![Equity Curve ETH](reports/backtest_eth_elite.png)
+![Equity Curve ETH](reports/backtest_eth_latest.png)
 
 ---
 
