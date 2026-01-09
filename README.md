@@ -157,7 +157,34 @@ Si tu VPS está en EE. UU., Binance bloqueará la conexión.
 El bot se quedó sin memoria RAM.
 - **Solución**: Aumenta el Swap o corre solo un bot a la vez.
 
-## 📊 Resultados Actuales (Enero 2026)
+## � Monitoreo y Vigilancia
+
+Tienes tres niveles para controlar tu ejército de bots:
+
+### 1. Nivel Táctico (En Vivo)
+Para ver qué decisión está tomando el bot en este preciso instante (cada minuto).
+```bash
+# Ver las últimas 50 líneas y seguir en vivo
+docker logs -f --tail 50 trader_eth
+```
+*Salida esperada:* `🟢 [COMPRA] SEÑAL DETECTADA` o `💤 Hold`.
+
+### 2. Nivel Estratégico (Entrenamiento)
+Para vigilar la evolución de la inteligencia del bot (Gráficas de retorno).
+- Accede desde tu navegador: `http://<TU_IP_VPS>:6006`
+- Fíjate en **`rollout/ep_rew_mean`** (Debe ser ascendente 📈).
+
+### 3. Nivel Forense (Auditoría)
+Para descargar el historial completo de operaciones a un archivo y analizarlo.
+```bash
+# Extraer el log interno del contenedor
+docker cp trader_eth:/app/live_trader.log ./auditoria_operaciones.txt
+
+# Leerlo
+cat auditoria_operaciones.txt
+```
+
+## �📊 Resultados Actuales (Enero 2026)
 | Activo | Retorno | Sharpe | Max Drawdown | Trades | Balance Final |
 | :--- | :---: | :---: | :---: | :---: | :--- |
 | **BTC** | **+3.11%** | **2.47** | **0.47%** | 212 | $10,310.51 |
