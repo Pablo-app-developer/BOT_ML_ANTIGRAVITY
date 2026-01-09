@@ -2,7 +2,7 @@ import time
 import os
 import pandas as pd
 import numpy as np
-import ccxt
+import yfinance as yf
 import logging
 from datetime import datetime
 from stable_baselines3 import PPO
@@ -20,21 +20,14 @@ logging.basicConfig(
 logger = logging.getLogger()
 
 class LiveTrader:
-    def __init__(self, asset_symbol, api_key=None, api_secret=None, sandbox=True):
+    def __init__(self, asset_symbol):
         self.symbol = asset_symbol.upper()
+        # Mapping symbol to Yahoo Ticker
+        self.yahoo_ticker = f"{self.symbol}-USD"
+        
         self.config = get_asset_config(self.symbol)
         
-        # Conexión a Exchange
-        self.exchange = ccxt.binance({
-            'apiKey': api_key,
-            'secret': api_secret,
-            'enableRateLimit': True,
-            'options': {'defaultType': 'future'} # Futuros perpetuos
-        })
-        
-        if sandbox:
-            self.exchange.set_sandbox_mode(True)
-            logger.warning("🧪 MODO SANDBOX (TESTNET) ACTIVADO. No se usará dinero real.")
+        logger.info(f"🌍 Conectando a Yahoo Finance ({self.yahoo_ticker}) para evitar bloqueo Geo-IP...")
             
         # Cargar Modelo
         model_path = f"models/PRODUCTION/{self.symbol}/ppo_{self.symbol.lower()}_final.zip"
@@ -49,16 +42,25 @@ class LiveTrader:
         self.current_position = 0 # 0: Nada, 1: Long
         self.entry_price = 0.0
 
-    def fetch_market_data(self, limit=100):
-        """Descarga las últimas velas para alimentar al modelo."""
-        timeframe = '15m'
+    def fetch_market_data(self):
+        """Descarga las últimas velas para alimentar al modelo usando Yahoo Finance."""
         try:
-            ohlcv = self.exchange.fetch_ohlcv(f"{self.symbol}/USDT", timeframe, limit=limit)
-            df = pd.DataFrame(ohlcv, columns=['timestamp', 'Open', 'High', 'Low', 'Close', 'Volume'])
-            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            # Download recent data (enough for window_size + indicators)
+            # interval='15m' is supported by yfinance for last 60 days
+            df = yf.download(self.yahoo_ticker, interval="15m", period="5d", progress=False)
+            
+            if len(df) == 0:
+                logger.error("❌ Yahoo Finance devolvió DataFrame vacío.")
+                return None, None
+
+            # Reset index to get columns clean
+            df = df.reset_index()
+            
+            # YFinance columns: Date, Open, High, Low, Close, Adj Close, Volume
+            # Ensure proper naming
+            df = df.rename(columns={"Date": "timestamp", "Datetime": "timestamp"})
             
             # Feature Engineering (TIENE QUE SER IDÉNTICO AL ENTRENAMIENTO)
-            # Copiar lógica exacta de trading_env.py
             # 1. Indicadores Técnicos
             df['RSI'] = self.calculate_rsi(df['Close'], 14)
             df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
@@ -84,11 +86,15 @@ class LiveTrader:
             obs_cols = ['Log_Ret', 'RSI_Norm', 'BB_Pct', 'EMA_20_Dist', 'EMA_50_Dist', 'EMA_200_Dist']
             
             if len(df) < self.window_size:
-                logger.error("❌ Datos insuficientes para generar predicción.")
-                return None
+                logger.error(f"❌ Datos insuficientes ({len(df)} velas). Esperando más historia...")
+                return None, None
                 
             recent_data = df[obs_cols].iloc[-self.window_size:].values.astype(np.float32)
             current_close = df['Close'].iloc[-1]
+            
+            # Clean scalar if it's a Series (yfinance quirk)
+            if hasattr(current_close, 'item'): 
+                current_close = current_close.item()
             
             return recent_data, current_close
             
@@ -99,8 +105,6 @@ class LiveTrader:
     def construct_observation(self, market_data):
         """Construye el tensor de observación final combinando Mercado + Estado de Cuenta."""
         # Necesitamos simular el estado de cuenta para la IA
-        # En live real, esto vendría de self.exchange.fetch_balance()
-        # Por seguridad inicial, lo normalizamos
         
         balance_ratio = 0.0 # Asumimos balance neutral estable
         position_ratio = 1.0 if self.current_position > 0 else 0.0
@@ -112,33 +116,34 @@ class LiveTrader:
         return obs
 
     def execute_trade(self, action, price):
-        """Ejecuta la orden en el exchange."""
+        """Simula la ejecución de la orden (Modo Señales)."""
         # 0: Hold, 1: Buy, 2: Sell
         
+        # Timestamp actual
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         if action == 1 and self.current_position == 0:
-            logger.info(f"🟢 SEÑAL DE COMPRA detectada a ${price:.2f}")
-            # AQUÍ IRÍA LA ORDEN REAL DE BINANCE
-            # order = self.exchange.create_market_buy_order(f"{self.symbol}/USDT", size)
+            logger.info(f"🟢 [COMPRA] SEÑAL DETECTADA a ${price:.2f} ({now})")
+            logger.info(f"   👉 Sugerencia: Abrir LONG en {self.symbol}")
             self.current_position = 1
             self.entry_price = price
             
         elif action == 2 and self.current_position > 0:
-            logger.info(f"🔴 SEÑAL DE VENTA detectada a ${price:.2f}")
+            logger.info(f"🔴 [VENTA] SEÑAL DETECTADA a ${price:.2f} ({now})")
             pnl = (price - self.entry_price) / self.entry_price * 100
-            logger.info(f"💰 Resultado Trade: {pnl:.2f}%")
-            # AQUÍ IRÍA LA ORDEN REAL DE BINANCE
+            logger.info(f"   💰 Cierre Sugerido. PnL Teórico: {pnl:.2f}%")
             self.current_position = 0
             
         else:
-            logger.info(f"💤 Hold. Acción: {action} | Posición actual: {self.current_position}")
+            # Reducir ruido: Solo loggear Hold ocasionalmente o si cambia algo
+            # logger.info(f"💤 Hold a ${price:.2f}") 
+            pass
 
     def run(self):
-        logger.info(f"🚀 Iniciando Trader en Vivo para {self.symbol}...")
+        logger.info(f"🚀 Iniciando Trader en Vivo (Señales) para {self.symbol}...")
         
         while True:
-            logger.info("⏳ Esperando cierre de vela (15m)...")
-            # En producción real, sincronizaríamos con el reloj del sistema
-            # Por ahora, ciclo simple de 1min para pruebas
+            # logger.info("⏳ Analizando mercado (Yahoo Finance)...")
             
             market_data, current_price = self.fetch_market_data()
             if market_data is not None:
@@ -150,7 +155,9 @@ class LiveTrader:
                 # Ejecutar
                 self.execute_trade(action.item(), current_price)
             
-            time.sleep(60 * 15) # Esperar 15 minutos (simulado)
+            # Esperar 60 segundos antes de volver a chequear
+            # Yahoo tiene retraso, no necesitamos consultar cada milisegundo
+            time.sleep(60) 
 
     # Utilidades
     def calculate_rsi(self, series, period):
@@ -163,5 +170,6 @@ class LiveTrader:
 if __name__ == "__main__":
     import sys
     asset = sys.argv[1] if len(sys.argv) > 1 else "ETH"
+    # No API keys needed for Yahoo
     trader = LiveTrader(asset)
     trader.run()
