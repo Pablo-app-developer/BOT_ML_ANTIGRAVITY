@@ -157,34 +157,152 @@ Si tu VPS está en EE. UU., Binance bloqueará la conexión.
 El bot se quedó sin memoria RAM.
 - **Solución**: Aumenta el Swap o corre solo un bot a la vez.
 
-## � Monitoreo y Vigilancia
+## 📊 Monitoreo y Diagnóstico Avanzado
 
-Tienes tres niveles para controlar tu ejército de bots:
+### 🔍 Verificación Rápida de Estado
 
-### 1. Nivel Táctico (En Vivo)
-Para ver qué decisión está tomando el bot en este preciso instante (cada minuto).
+Para ver el rendimiento actual de todos los bots de un vistazo:
+
 ```bash
-# Ver las últimas 50 líneas y seguir en vivo
-docker logs -f --tail 50 trader_eth
-```
-*Salida esperada:* `🟢 [COMPRA] SEÑAL DETECTADA` o `💤 Hold`.
-
-### 2. Nivel Estratégico (Entrenamiento)
-Para vigilar la evolución de la inteligencia del bot (Gráficas de retorno).
-- Accede desde tu navegador: `http://107.174.133.37:6006`
-- Fíjate en **`rollout/ep_rew_mean`** (Debe ser ascendente 📈).
-
-### 3. Nivel Forense (Auditoría)
-Para descargar el historial completo de operaciones a un archivo y analizarlo.
-```bash
-# Extraer el log interno del contenedor
-docker cp trader_eth:/app/live_trader.log ./auditoria_operaciones.txt
-
-# Leerlo
-cat auditoria_operaciones.txt
+# Resumen de Balance y WinRate (Comando Rápido)
+echo "=== BTC ===" && docker logs trader_btc 2>&1 | grep -E "Balance Sim|WinRate" | tail -2
+echo "=== ETH ===" && docker logs trader_eth 2>&1 | grep -E "Balance Sim|WinRate" | tail -2  
+echo "=== SOL ===" && docker logs trader_sol 2>&1 | grep -E "Balance Sim|WinRate" | tail -2
 ```
 
-## �📊 Resultados Actuales (Enero 2026)
+**Salida esperada:**
+```
+=== BTC ===
+💰 Cierre. PnL: 0.02% | Balance Sim: $100,165.16
+📊 ESTADO: WinRate: 55.6% | DD Diario Max: 0.01%
+```
+
+---
+
+### 🏥 Verificación de Salud de Contenedores
+
+```bash
+# Ver si los bots están corriendo
+docker ps | grep trader
+
+# Ejemplo de salida saludable:
+# trader_btc   Up 5 days
+# trader_eth   Up 5 days  
+# trader_sol   Up 5 days
+```
+
+**Interpretación:**
+- `Up X days/hours` = Bot operativo ✅
+- `Restarting` = Problema crítico ❌
+- Ausente = Bot no lanzado ⚠️
+
+---
+
+### 📈 Análisis de Actividad (Desde el último reinicio)
+
+```bash
+# Ver últimos 50 eventos de cada bot
+echo "=== Últimos eventos BTC ==="
+docker logs --tail 50 trader_btc
+
+echo "=== Últimos eventos ETH ==="
+docker logs --tail 50 trader_eth
+
+echo "=== Últimos eventos SOL ==="
+docker logs --tail 50 trader_sol
+```
+
+**Qué buscar:**
+- `🟢 [COMPRA]` = Posición abierta
+- `🔴 [VENTA]` = Operación cerrada con reporte de PnL
+- `❄️ Enfriamiento activo` = En cooldown (esperando para comprar)
+- `🛡️ STOP LOSS ACTIVADO` = Protección ejecutada
+- `⚠️ PELIGRO PROP FIRM` = Drawdown cercano al límite (4%)
+
+---
+
+### 📊 Ver Historial Completo (Desde el primer día)
+
+```bash
+# Contar total de operaciones realizadas
+docker logs trader_btc | grep -c "VENTA"
+docker logs trader_eth | grep -c "VENTA"
+docker logs trader_sol | grep -c "VENTA"
+
+# Ver todas las operaciones con su resultado
+docker logs trader_btc | grep "Balance Sim"
+
+# Exportar log completo para análisis externo
+docker logs trader_btc > btc_full_history.txt
+```
+
+---
+
+### 🎯 Métricas Clave de Prop Firm
+
+```bash
+# Ver evolución del Balance simulado
+docker logs trader_eth | grep "Balance Sim" | tail -10
+
+# Ver histórico de WinRate
+docker logs trader_eth | grep "WinRate" | tail -10
+
+# Verificar si hubo alertas de riesgo
+docker logs trader_eth | grep "PELIGRO"
+
+# Ver todos los resets de día (para tracking diario)
+docker logs trader_eth | grep "NUEVO DÍA"
+```
+
+---
+
+### 🔧 Diagnóstico de Problemas
+
+#### Problema: Bot no opera hace días
+
+```bash
+# Ver si está conectándose bien a Yahoo Finance
+docker logs trader_eth | grep "Yahoo Finance"
+
+# Ver si hay errores de descarga
+docker logs trader_eth | grep "ERROR"
+
+# Ver cuántas líneas de log tiene (debería crecer constantemente)
+docker logs trader_eth | wc -l
+```
+
+#### Problema: Quiero ver gráficas (TensorBoard vacío)
+
+```bash
+# Verificar que TensorBoard esté corriendo
+docker ps | grep antigravity_board
+
+# Acceder a las gráficas
+# http://107.174.133.37:6006
+# (Reemplaza con tu IP de Tailscale para mayor seguridad)
+```
+
+**Nota:** Las gráficas solo aparecen después de que el bot cierra su **primera operación**. Si están en modo Hold, TensorBoard estará vacío.
+
+---
+
+### 📱 Acceso Remoto Seguro (Portainer)
+
+Para gestión visual de todos los contenedores:
+
+```
+https://107.174.133.37:9443
+Usuario: admin
+```
+
+Desde Portainer puedes:
+- Ver logs en tiempo real con interfaz gráfica
+- Reiniciar bots con un clic
+- Monitorear uso de CPU/RAM
+- Ver estadísticas de red
+```
+
+## 📊 Resultados Actuales (Enero 2026)
 | Activo | Retorno | Sharpe | Max Drawdown | Trades | Balance Final |
 | :--- | :---: | :---: | :---: | :---: | :--- |
 | **BTC** | **+3.11%** | **2.47** | **0.47%** | 212 | $10,310.51 |

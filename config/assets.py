@@ -34,7 +34,7 @@ ASSETS = {
     "ETH": AssetConfig(
         name="ETH",
         env_params={
-            "cooldown_steps": 6,
+            "cooldown_steps": 3,
             "stop_loss": 0.025,
             "trailing_stop_drop": 0.015,
             "risk_aversion": 1.3,
