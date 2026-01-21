@@ -1,0 +1,34 @@
+# Ultra-lightweight Python Alpine image
+FROM python:3.11-alpine
+
+# Install only essential build dependencies
+RUN apk add --no-cache --virtual .build-deps \
+    gcc \
+    musl-dev \
+    linux-headers \
+    && apk add --no-cache \
+    libstdc++
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first (for caching)
+COPY requirements_ccxt.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements_ccxt.txt \
+    && apk del .build-deps
+
+# Copy only necessary files
+COPY config/settings_ccxt.py ./config/
+COPY config/__init__.py ./config/
+COPY src/main_ccxt.py ./src/
+
+# Create empty __init__.py files if they don't exist
+RUN touch ./config/__init__.py 2>/dev/null || true
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+
+# Run the bot
+CMD ["python", "-u", "src/main_ccxt.py"]

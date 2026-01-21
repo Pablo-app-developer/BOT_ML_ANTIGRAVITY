@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  smc_fusion_ccxt:
+    build:
+      context: .
+      dockerfile: Dockerfile.ccxt
+    image: smc_fusion_ccxt_img
+    container_name: smc_fusion_ccxt_bot
+    restart: unless-stopped
+    env_file:
+      - .env.ccxt
+    volumes:
+      - ./bot_journal.csv:/app/bot_journal.csv
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    mem_limit: 256m
+    cpus: 0.5
