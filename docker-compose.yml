@@ -10,7 +10,6 @@ services:
       - ./models:/app/models
       - ./run_live_trader.py:/app/run_live_trader.py
       - ./config:/app/config
-      - ./datos_btc_15m_binance.csv:/app/datos_btc_15m_binance.csv
     command: python run_live_trader.py BTC
     deploy:
       resources:
@@ -25,7 +24,6 @@ services:
       - ./models:/app/models
       - ./run_live_trader.py:/app/run_live_trader.py
       - ./config:/app/config
-      - ./datos_eth_15m_binance.csv:/app/datos_eth_15m_binance.csv
     command: python run_live_trader.py ETH
     deploy:
       resources:
@@ -40,7 +38,6 @@ services:
       - ./models:/app/models
       - ./run_live_trader.py:/app/run_live_trader.py
       - ./config:/app/config
-      - ./datos_sol_15m_binance.csv:/app/datos_sol_15m_binance.csv
     command: python run_live_trader.py SOL
     deploy:
       resources:
