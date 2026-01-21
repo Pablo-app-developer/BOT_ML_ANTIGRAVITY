@@ -171,7 +171,7 @@ docker logs -f --tail 50 trader_eth
 
 ### 2. Nivel Estratégico (Entrenamiento)
 Para vigilar la evolución de la inteligencia del bot (Gráficas de retorno).
-- Accede desde tu navegador: `http://<TU_IP_VPS>:6006`
+- Accede desde tu navegador: `http://107.174.133.37:6006`
 - Fíjate en **`rollout/ep_rew_mean`** (Debe ser ascendente 📈).
 
 ### 3. Nivel Forense (Auditoría)
