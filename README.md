@@ -278,7 +278,7 @@ docker logs trader_eth | wc -l
 docker ps | grep antigravity_board
 
 # Acceder a las gráficas
-# http://107.174.133.37:6006
+# http://107.174.133.202:6006
 # (Reemplaza con tu IP de Tailscale para mayor seguridad)
 ```
 
@@ -291,7 +291,7 @@ docker ps | grep antigravity_board
 Para gestión visual de todos los contenedores:
 
 ```
-https://107.174.133.37:9443
+https://107.174.133.202:9443
 Usuario: admin
 ```
 
