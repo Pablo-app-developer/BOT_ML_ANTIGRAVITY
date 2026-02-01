@@ -84,15 +84,60 @@ class LiveTrader:
 
     def fetch_market_data(self):
         """Descarga las últimas velas para alimentar al modelo usando Yahoo Finance."""
-        try:
-            # Download recent data (enough for window_size + indicators)
-            # interval='15m' is supported by yfinance for last 60 days
-            df = yf.download(self.yahoo_ticker, interval="15m", period="5d", progress=False)
-            
-            if len(df) == 0:
-                logger.error("❌ Yahoo Finance devolvió DataFrame vacío.")
-                return None, None
+        import random
+        
+        # Anti-blocking: Retry logic with exponential backoff
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        df = pd.DataFrame() # Initialize df outside the loop
+        
+        for attempt in range(max_retries):
+            try:
+                # Anti-blocking: Random delay between requests (1-3 seconds)
+                if attempt > 0:
+                    delay = retry_delay * (2 ** attempt) + random.uniform(0, 2)
+                    logger.info(f"⏳ Reintento {attempt + 1}/{max_retries} en {delay:.1f}s...")
+                    time.sleep(delay)
+                
+                # Anti-blocking: Set user-agent to mimic browser
+                import yfinance as yf
+                yf.pdr_override()
+                
+                # Download recent data (enough for window_size + indicators)
+                # interval='15m' is supported by yfinance for last 60 days
+                df = yf.download(
+                    self.yahoo_ticker, 
+                    interval="15m", 
+                    period="5d", 
+                    progress=False,
+                    timeout=10
+                )
+                
+                if len(df) == 0:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"⚠️ Yahoo Finance devolvió DataFrame vacío (intento {attempt + 1}/{max_retries})")
+                        continue
+                    else:
+                        logger.error("❌ Yahoo Finance devolvió DataFrame vacío después de todos los reintentos.")
+                        return None, None
+                
+                # Success - exit retry loop
+                break
+                
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"⚠️ Error temporal descargando datos (intento {attempt + 1}/{max_retries}): {e}")
+                    continue
+                else:
+                    logger.error(f"❌ Error descargando datos después de {max_retries} intentos: {e}")
+                    return None, None
+        
+        # If df is still empty after all retries, return None
+        if df.empty:
+            return None, None
 
+        try:
             # YFinance columns might come as MultiIndex (Price, Ticker). Flatten them.
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
