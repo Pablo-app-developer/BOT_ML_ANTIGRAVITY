@@ -99,10 +99,9 @@ class LiveTrader:
                     delay = retry_delay * (2 ** attempt) + random.uniform(0, 2)
                     logger.info(f"⏳ Reintento {attempt + 1}/{max_retries} en {delay:.1f}s...")
                     time.sleep(delay)
-                
-                # Anti-blocking: Set user-agent to mimic browser
-                import yfinance as yf
-                yf.pdr_override()
+                else:
+                    # Small random delay even on first attempt to avoid rate limiting
+                    time.sleep(random.uniform(0.5, 1.5))
                 
                 # Download recent data (enough for window_size + indicators)
                 # interval='15m' is supported by yfinance for last 60 days
