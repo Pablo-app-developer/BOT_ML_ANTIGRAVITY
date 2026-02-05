@@ -2,205 +2,227 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-from datetime import datetime, timedelta
-from database import get_db_connection, get_bot_summary, get_all_trades
+from datetime import datetime
+from database import get_bot_summary, get_all_trades
 
-# Configuración de la página
+# --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
-    page_title="Trading Bots Dashboard",
-    page_icon="🤖",
+    page_title="Antigravity | Pro Terminal",
+    page_icon="💸",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"  # Más espacio para datos
 )
 
-# Estilos personalizados
+# --- ESTILOS CSS PERSONALIZADOS (MODERN DARK UI) ---
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.5rem;
+    /* Fondo General */
+    .stApp {
+        background-color: #0e1117;
+    }
+    
+    /* Métricas Principales (KPIs) */
+    div[data-testid="metric-container"] {
+        background-color: #1a1c24;
+        border: 1px solid #2d2f36;
+        padding: 15px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        transition: transform 0.2s;
+    }
+    div[data-testid="metric-container"]:hover {
+        transform: translateY(-2px);
+        border-color: #4e5d6c;
+    }
+    
+    /* Títulos Grandes */
+    .big-font {
+        font-size: 24px !important;
+        font-weight: 600;
+        color: #e0e0e0;
+        margin-bottom: 20px;
+    }
+    
+    /* Tablas */
+    div[data-testid="stDataFrame"] {
+        background-color: #1a1c24;
+        border-radius: 8px;
+        padding: 10px;
+    }
+    
+    /* Badge de Estado */
+    .status-badge {
+        padding: 4px 8px;
+        border-radius: 4px;
         font-weight: bold;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
+        font-size: 12px;
     }
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        padding: 1.5rem;
-        border-radius: 10px;
-        color: white;
-        text-align: center;
-    }
-    .profit {
-        color: #00ff00;
-        font-weight: bold;
-    }
-    .loss {
-        color: #ff4444;
-        font-weight: bold;
-    }
+    .status-long { background-color: #00c853; color: white; }
+    .status-flat { background-color: #78909c; color: white; }
+    
 </style>
 """, unsafe_allow_html=True)
 
-# Header
-st.markdown('<div class="main-header">🤖 Antigravity Trading Bots Dashboard</div>', unsafe_allow_html=True)
+# --- HEADER PROFESIONAL ---
+col_head1, col_head2 = st.columns([3, 1])
+with col_head1:
+    st.markdown("## 🛰️ Antigravity AI Fund <span style='font-size:14px; color:gray;'>| Live Trading Terminal</span>", unsafe_allow_html=True)
+with col_head2:
+    st.markdown(f"<div style='text-align:right; color:#78909c;'>Updated: {datetime.now().strftime('%H:%M:%S')}</div>", unsafe_allow_html=True)
+    if st.button("🔄 Actualizar Datos", use_container_width=True):
+        st.rerun()
 
-# Sidebar
-with st.sidebar:
-    st.image("https://via.placeholder.com/150x150.png?text=BOT", width=150)
-    st.title("⚙️ Configuración")
-    
-    refresh_rate = st.selectbox("Auto-refresh", ["Manual", "30s", "1min", "5min"], index=2)
-    selected_bot = st.selectbox("Filtrar Bot", ["Todos", "BTC", "ETH", "SOL"])
-    
-    st.markdown("---")
-    st.markdown("### 📊 Información")
-    st.info(f"Última actualización: {datetime.now().strftime('%H:%M:%S')}")
-
-# Auto-refresh logic
-if refresh_rate != "Manual":
-    refresh_seconds = {"30s": 30, "1min": 60, "5min": 300}[refresh_rate]
-    st.empty()  # Placeholder for auto-refresh
-
-# Obtener datos
+# --- CARGA DE DATOS ---
 try:
-    summary = get_bot_summary()
-    all_trades = get_all_trades(limit=500)
+    summary_data = get_bot_summary()
+    trades_data = get_all_trades(limit=1000)
     
-    # Convertir a DataFrame
-    df_summary = pd.DataFrame(summary, columns=['bot_name', 'total_trades', 'wins', 'losses', 'avg_pnl', 'current_balance'])
-    df_trades = pd.DataFrame(all_trades, columns=['id', 'bot_name', 'timestamp', 'action', 'price', 'pnl_pct', 'balance', 'win_rate', 'daily_drawdown', 'created_at'])
+    # DataFrames
+    df_summary = pd.DataFrame(summary_data, columns=['bot_name', 'total_trades', 'wins', 'losses', 'avg_pnl', 'current_balance'])
+    df_trades = pd.DataFrame(trades_data, columns=['id', 'bot_name', 'timestamp', 'action', 'price', 'pnl_pct', 'balance', 'win_rate', 'daily_drawdown', 'created_at'])
+
+    # --- CALCULOS GLOBALES ---
+    initial_capital = 300000.00
+    current_total_balance = df_summary['current_balance'].sum() if not df_summary.empty else initial_capital
+    total_pnl_abs = current_total_balance - initial_capital
+    total_roi_pct = (total_pnl_abs / initial_capital) * 100
     
-    # Métricas generales
-    col1, col2, col3, col4 = st.columns(4)
-    
-    total_balance = df_summary['current_balance'].sum() if not df_summary.empty else 300000
-    total_pnl = total_balance - 300000
-    total_trades = df_summary['total_trades'].sum() if not df_summary.empty else 0
-    avg_win_rate = (df_summary['wins'].sum() / df_summary['total_trades'].sum() * 100) if total_trades > 0 else 0
-    
-    with col1:
-        st.metric("💰 Balance Total", f"${total_balance:,.2f}", f"${total_pnl:+,.2f}")
-    
-    with col2:
-        st.metric("📈 ROI Total", f"{(total_pnl/300000*100):.2f}%", 
-                 delta_color="normal" if total_pnl >= 0 else "inverse")
-    
-    with col3:
-        st.metric("🔄 Operaciones Totales", f"{int(total_trades)}")
-    
-    with col4:
-        st.metric("🎯 Win Rate Promedio", f"{avg_win_rate:.1f}%")
-    
+    active_bots_count = len(df_summary)
+
+    # --- TOP ROW: GLOBAL KPIs ---
     st.markdown("---")
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+
+    kpi1.metric(
+        label="💰 Capital Total (NAV)",
+        value=f"${current_total_balance:,.2f}",
+        delta=f"${total_pnl_abs:,.2f} ({total_roi_pct:+.2f}%)",
+        delta_color="normal"
+    )
+
+    # Calcular PnL de hoy (aprox)
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    df_trades['timestamp'] = pd.to_datetime(df_trades['timestamp'])
+    today_pnl = 0.0
     
-    # Gráfica de balance por bot
-    col_left, col_right = st.columns([2, 1])
+    if not df_trades.empty:
+        today_trades = df_trades[df_trades['timestamp'].dt.date == datetime.now().date()]
+        # Aproximación basada en logs de VENTA hoy
+        today_sells = today_trades[today_trades['action'] == 'VENTA']
+        # El PnL real por operación no está explícito en monto, pero podemos estimarlo o sumarlo si lo tuviéramos
+        # Por ahora usaremos el conteo de operaciones hoy
+        ops_today = len(today_trades)
     
-    with col_left:
-        st.subheader("📊 Evolución del Balance por Bot")
-        
+    kpi2.metric(
+        label="📊 Operaciones Hoy",
+        value=ops_today if 'ops_today' in locals() else 0,
+        delta="Actividad Reciente",
+        delta_color="off"
+    )
+
+    best_bot = df_summary.loc[df_summary['current_balance'].idxmax()] if not df_summary.empty else None
+    kpi3.metric(
+        label="🏆 Bot Líder",
+        value=best_bot['bot_name'] if best_bot is not None else "-",
+        delta=f"${best_bot['current_balance']:,.2f}" if best_bot is not None else "-"
+    )
+
+    kpi4.metric(
+        label="🤖 Bots Activos",
+        value=active_bots_count,
+        delta="En línea",
+        delta_color="off"
+    )
+
+    # --- SECCIÓN GRAFICA ---
+    st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
+    c_chart, c_details = st.columns([2, 1])
+
+    with c_chart:
+        st.subheader("📈 Curva de Rendimiento Comparada")
         if not df_trades.empty:
-            df_trades['timestamp'] = pd.to_datetime(df_trades['timestamp'])
-            df_balance = df_trades[df_trades['action'] == 'VENTA'].copy()
+            # Filtrar solo entradas de venta o sync que actualizan balance
+            df_balance_hist = df_trades[df_trades['action'].isin(['VENTA', 'SYNC'])].copy()
             
-            fig = go.Figure()
-            
-            for bot in ['BTC', 'ETH', 'SOL']:
-                bot_data = df_balance[df_balance['bot_name'] == bot].sort_values('timestamp')
-                if not bot_data.empty:
-                    fig.add_trace(go.Scatter(
-                        x=bot_data['timestamp'],
-                        y=bot_data['balance'],
-                        mode='lines+markers',
-                        name=bot,
-                        line=dict(width=2),
-                        marker=dict(size=8)
-                    ))
-            
-            fig.update_layout(
-                xaxis_title="Fecha",
-                yaxis_title="Balance ($)",
-                hovermode='x unified',
-                template='plotly_dark',
-                height=400
+            # Crear gráfica multilínea
+            fig = px.line(
+                df_balance_hist, 
+                x="timestamp", 
+                y="balance", 
+                color="bot_name",
+                markers=True,
+                color_discrete_map={
+                    "BTC": "#f7931a",
+                    "ETH": "#627eea",
+                    "SOL": "#00ffbd"
+                }
             )
-            
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)',
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color='#e0e0e0',
+                xaxis_title="",
+                yaxis_title="Balance ($)",
+                legend_title_text="",
+                hovermode="x unified",
+                margin=dict(l=0, r=0, t=20, b=0)
+            )
+            fig.update_xaxes(showgrid=False)
+            fig.update_yaxes(showgrid=True, gridcolor='#2d2f36')
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("No hay datos de operaciones aún")
-    
-    with col_right:
-        st.subheader("🤖 Rendimiento por Bot")
-        
+            st.info("Esperando datos para generar gráfica...")
+
+    with c_details:
+        st.subheader("📋 Estado por Activo")
         if not df_summary.empty:
-            for _, row in df_summary.iterrows():
-                bot_pnl = row['current_balance'] - 100000
-                bot_roi = (bot_pnl / 100000) * 100
-                
-                with st.expander(f"**{row['bot_name']}** - ${row['current_balance']:,.2f}", expanded=True):
-                    st.metric("ROI", f"{bot_roi:+.2f}%")
-                    st.metric("Operaciones", f"{int(row['total_trades'])}")
-                    st.metric("Win Rate", f"{(row['wins']/row['total_trades']*100):.1f}%" if row['total_trades'] > 0 else "0%")
+            for index, row in df_summary.iterrows():
+                # Card Individual
+                with st.container():
+                    # Definir color según PnL
+                    roi = ((row['current_balance'] - 100000) / 100000) * 100
+                    color = "#00c853" if roi >= 0 else "#ff5252"
                     
-                    # Progress bar del balance
-                    progress = (row['current_balance'] - 100000) / 1000  # Escala de -1000 a +1000
-                    st.progress(max(0, min(1, (progress + 1000) / 2000)))
-        else:
-            st.info("Esperando datos de los bots...")
-    
+                    st.markdown(f"""
+                    <div style="background-color: #1a1c24; padding: 12px; border-radius: 8px; margin-bottom: 10px; border-left: 4px solid {color};">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <h3 style="margin: 0; color: white;">{row['bot_name']}</h3>
+                            <span style="font-size: 18px; font-weight: bold; color: {color};">{roi:+.2f}%</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; margin-top: 5px; font-size: 14px; color: #b0bec5;">
+                            <span>Balance: ${row['current_balance']:,.2f}</span>
+                            <span>Trades: {int(row['total_trades'])}</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+    # --- TABLA DE OPERACIONES RECIENTES ---
     st.markdown("---")
-    
-    # Tabla de operaciones recientes
-    st.subheader("📜 Últimas Operaciones")
-    
+    st.subheader("📜 Historial de Operaciones (Live Feed)")
+
     if not df_trades.empty:
-        # Filtrar por bot si se seleccionó
-        if selected_bot != "Todos":
-            df_display = df_trades[df_trades['bot_name'] == selected_bot].copy()
-        else:
-            df_display = df_trades.copy()
+        # Formatear tabla para visualización
+        df_display = df_trades.copy()
+        df_display['timestamp'] = df_display['timestamp'].dt.strftime('%d %b %H:%M')
         
-        # Formatear para mostrar
-        df_display = df_display[['bot_name', 'timestamp', 'action', 'price', 'pnl_pct', 'balance', 'win_rate']].head(20)
-        df_display['timestamp'] = pd.to_datetime(df_display['timestamp']).dt.strftime('%Y-%m-%d %H:%M')
-        df_display['price'] = df_display['price'].apply(lambda x: f"${x:,.2f}")
-        df_display['pnl_pct'] = df_display['pnl_pct'].apply(lambda x: f"{x:+.2f}%" if pd.notna(x) else "-")
-        df_display['balance'] = df_display['balance'].apply(lambda x: f"${x:,.2f}")
-        df_display['win_rate'] = df_display['win_rate'].apply(lambda x: f"{x:.1f}%" if pd.notna(x) else "-")
-        
-        df_display.columns = ['Bot', 'Fecha', 'Acción', 'Precio', 'PnL %', 'Balance', 'Win Rate']
-        
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
-    else:
-        st.info("No hay operaciones registradas todavía")
-    
-    # Gráfica de distribución de PnL
-    st.markdown("---")
-    st.subheader("📊 Distribución de Ganancias/Pérdidas")
-    
-    if not df_trades.empty:
-        df_pnl = df_trades[df_trades['pnl_pct'].notna()].copy()
-        
-        if not df_pnl.empty:
-            fig_pnl = px.histogram(
-                df_pnl,
-                x='pnl_pct',
-                color='bot_name',
-                nbins=20,
-                title="Distribución de PnL por Operación",
-                labels={'pnl_pct': 'PnL (%)', 'count': 'Frecuencia'},
-                template='plotly_dark'
-            )
-            
-            st.plotly_chart(fig_pnl, use_container_width=True)
+        # Colorear PnL
+        def color_pnl(val):
+            if isinstance(val, float):
+                color = '#00c853' if val > 0 else '#ff5252' if val < 0 else 'gray'
+                return f'color: {color}; font-weight: bold;'
+            return ''
+
+        # Seleccionar columnas clave
+        df_show = df_display[['timestamp', 'bot_name', 'action', 'price', 'pnl_pct', 'balance', 'win_rate']].head(15)
+        df_show.columns = ['Fecha/Hora', 'Activo', 'Acción', 'Precio ($)', 'PnL %', 'Balance ($)', 'Win Rate %']
+
+        st.dataframe(
+            df_show.style.applymap(color_pnl, subset=['PnL %']),
+            use_container_width=True,
+            hide_index=True
+        )
 
 except Exception as e:
-    st.error(f"Error al cargar datos: {e}")
-    st.info("Asegúrate de que los bots estén guardando datos en la base de datos")
+    st.error(f"Error cargando dashboard: {e}")
+    st.code("Puede que la base de datos esté vacía o bloqueada. Intenta recargar.")
 
-# Footer
-st.markdown("---")
-st.markdown(
-    "<div style='text-align: center; color: gray;'>Antigravity Trading Bots © 2026 | Powered by Streamlit</div>",
-    unsafe_allow_html=True
-)
