@@ -8,6 +8,7 @@ from datetime import datetime
 from stable_baselines3 import PPO
 from config import get_asset_config
 from torch.utils.tensorboard import SummaryWriter
+from database import init_database, save_trade
 
 # Configuración de Logging
 logging.basicConfig(
@@ -243,6 +244,12 @@ class LiveTrader:
             self.current_position = 1
             self.entry_price = price
             
+            # Guardar en base de datos
+            try:
+                save_trade(self.symbol, "COMPRA", price, None, self.sim_balance, 0, self.max_daily_loss)
+            except Exception as e:
+                logger.error(f"Error guardando COMPRA en DB: {e}")
+            
         elif action == 2 and self.current_position > 0:
             logger.info(f"🔴 [VENTA] SEÑAL DETECTADA a ${price:.2f} ({now_str})")
             pnl_pct = (price - self.entry_price) / self.entry_price 
@@ -267,6 +274,12 @@ class LiveTrader:
                 self.writer.flush()
             except Exception as e:
                 logger.error(f"Error escribiendo a TensorBoard: {e}")
+            
+            # Guardar en base de datos
+            try:
+                save_trade(self.symbol, "VENTA", price, pnl_pct*100, self.sim_balance, win_rate, self.max_daily_loss)
+            except Exception as e:
+                logger.error(f"Error guardando VENTA en DB: {e}")
 
             self.current_position = 0
             self.last_sell_time = now_ts # Start Cooldown Clock
@@ -305,6 +318,13 @@ class LiveTrader:
 
 if __name__ == "__main__":
     import sys
+    
+    # Asegurar que la DB existe
+    try:
+        init_database()
+    except Exception as e:
+        logger.error(f"Error inicializando DB: {e}")
+
     asset = sys.argv[1] if len(sys.argv) > 1 else "ETH"
     # No API keys needed for Yahoo
     trader = LiveTrader(asset)

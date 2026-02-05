@@ -10,6 +10,9 @@ services:
       - ./models:/app/models
       - ./run_live_trader.py:/app/run_live_trader.py
       - ./config:/app/config
+      - ./database.py:/app/database.py
+      - ./data:/app/data
+      - ./tensorboard_logs:/app/tensorboard_logs
     command: python run_live_trader.py BTC
     deploy:
       resources:
@@ -24,6 +27,9 @@ services:
       - ./models:/app/models
       - ./run_live_trader.py:/app/run_live_trader.py
       - ./config:/app/config
+      - ./database.py:/app/database.py
+      - ./data:/app/data
+      - ./tensorboard_logs:/app/tensorboard_logs
     command: python run_live_trader.py ETH
     deploy:
       resources:
@@ -38,11 +44,26 @@ services:
       - ./models:/app/models
       - ./run_live_trader.py:/app/run_live_trader.py
       - ./config:/app/config
+      - ./database.py:/app/database.py
+      - ./data:/app/data
+      - ./tensorboard_logs:/app/tensorboard_logs
     command: python run_live_trader.py SOL
     deploy:
       resources:
         limits:
           memory: 1G
+
+  dashboard:
+    image: antigravity-bot:latest
+    container_name: antigravity_dashboard
+    restart: unless-stopped
+    volumes:
+      - ./database.py:/app/database.py
+      - ./dashboard.py:/app/dashboard.py
+      - ./data:/app/data
+    command: streamlit run dashboard.py --server.port 8502 --server.address 0.0.0.0
+    ports:
+      - "8502:8502"
 
   tensorboard:
     image: tensorflow/tensorflow:latest

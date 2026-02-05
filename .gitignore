@@ -21,3 +21,6 @@ models/ARCHIVE/
 tensorboard_logs/
 reports/*.png
 *.log
+
+# Database
+data/
