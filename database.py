@@ -101,14 +101,14 @@ def get_bot_summary():
         cursor = conn.cursor()
         cursor.execute('''
             SELECT 
-                bot_name,
-                COUNT(*) as total_trades,
-                SUM(CASE WHEN pnl_pct > 0 THEN 1 ELSE 0 END) as wins,
-                SUM(CASE WHEN pnl_pct < 0 THEN 1 ELSE 0 END) as losses,
-                AVG(pnl_pct) as avg_pnl,
-                MAX(balance) as current_balance
-            FROM trades
-            WHERE action = 'VENTA'
-            GROUP BY bot_name
+                t.bot_name,
+                COUNT(t.id) as total_trades,
+                SUM(CASE WHEN t.pnl_pct > 0 THEN 1 ELSE 0 END) as wins,
+                SUM(CASE WHEN t.pnl_pct < 0 THEN 1 ELSE 0 END) as losses,
+                AVG(t.pnl_pct) as avg_pnl,
+                (SELECT balance FROM trades t2 WHERE t2.bot_name = t.bot_name ORDER BY t2.timestamp DESC LIMIT 1) as current_balance
+            FROM trades t
+            WHERE t.action = 'VENTA' or t.action = 'SYNC'
+            GROUP BY t.bot_name
         ''')
         return cursor.fetchall()
